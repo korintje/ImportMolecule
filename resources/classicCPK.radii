@@ -1,0 +1,25 @@
+# Written in Python default config format
+# Classic CPK model radiis of elements
+
+[options]
+name = ClassicCPK
+description = Classic CPK radii
+unit = pm
+ref_urls = ["https://github.com/zulman/qutemol/blob/a7ca8add0683cd311cbcdbed5c7e49cb1681fb61/src/AtomColor.cpp", "http://www.umass.edu/microbio/rasmol/rasbonds.htm", "http://www.imb-jena.de/ImgLibDoc/glossary/IMAGE_VDWR.html"] 
+default_value = 150
+# parent = none
+
+[elements]
+H  = 110
+C  = 155
+N  = 140
+O  = 135
+F  = 147
+P  = 188
+S  = 181
+Cl = 189
+Ca = 195
+Fe = 195
+Zn = 115
+Cd = 175
+I  = 175

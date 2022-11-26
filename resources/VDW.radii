@@ -1,0 +1,49 @@
+# Written in Python default config format
+# van der Waals radiis of elements
+
+[options]
+name = VDW
+description = van dr Waals radii
+unit = pm
+ref_urls = ["https://www.hulinks.co.jp/support/c-maker/qa_005.html"] 
+default_value = 150
+
+[elements]
+H  = 120
+He = 140
+Li = 182
+C  = 170
+N  = 155
+O  = 152
+F  = 147
+Ne = 154
+Na = 227
+Mg = 173
+Si = 210
+P  = 180
+S  = 180
+Cl = 175
+Ar = 188
+K  = 275
+Ni = 163
+Cu = 140
+Zn = 139
+Ga = 187
+As = 185
+Se = 190
+Br = 185
+Kr = 202
+Pd = 163
+Ag = 172
+Cd = 158
+In = 193
+Sn = 217
+Te = 206
+I  = 198
+Xe = 216
+Pt = 175
+Au = 166
+Hg = 155
+Tl = 196
+Pb = 202
+U  = 186
