@@ -1,0 +1,10 @@
+{
+	"autodeskProduct":	"Fusion360",
+	"type":	"script",
+	"author":	"korintje",
+	"description":	{
+		"":	"Tutorial"
+	},
+	"supportedOS":	"windows|mac",
+	"editEnabled":	true
+}
