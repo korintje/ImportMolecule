@@ -4,7 +4,6 @@
 import adsk
 import os, sys, math, glob, configparser, traceback, subprocess
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
-from . import pygjf
 
 # Global instances
 core = adsk.core
