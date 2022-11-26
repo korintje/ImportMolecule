@@ -47,7 +47,7 @@ try:
 except:
     SCRIPTPATH = os.path.join(CURRENT_DIR, "get-pip.py")
     PYTHONPATH = sys.executable
-    if PYTHONPATH.endswith("Fusion360.exe"):
+    if PYTHONPATH.endswith("Fusion360.exe") or PYTHONPATH.endswith("Fusion360"):
         f360dirname = os.path.dirname(PYTHONPATH)
         PYTHONPATH = os.path.join(f360dirname, "Python", "python")
     ui.messageBox('Press OK to install required modules (Shown only at the first run)')
