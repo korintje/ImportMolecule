@@ -6,7 +6,7 @@ name = Uniform
 description = Unifrom radii for all elements
 unit = pm
 ref_urls = []
-default_value = 50
+default_value = 20
 
 [elements]
 # No description because all atom radiis is set a certain value. 

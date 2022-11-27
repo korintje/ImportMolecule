@@ -22,7 +22,13 @@ radii_settings = {}
 # Global constants
 CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
 RESOURCE_DIR = os.path.join(CURRENT_DIR, 'resources')
-DEFAULT_SETNAMES = {"name": "Molecule", "radii": "VDW", "colors": "Default"}
+DEFAULT_SETNAMES = {
+    "name": "Molecule",
+    "radii": "Uniform",
+    "colors": "Default",
+    "bond_radius": 0.1,
+    "bond_enabled": False
+}
 DEFAULT_MATERIAL_ID = 'PrismMaterial-022'
 DEFAULT_APPEARANCE_ID = 'Prism-374'
 MATERIAL_LIB_ID = 'C1EEA57C-3F56-45FC-B8CB-A9EC46A9994C'
@@ -43,6 +49,7 @@ ALL_ELEMENTS = [
 # Try to import ASE module. If not exist, first install ASE and import it.
 try:
     import ase.io
+    import ase.neighborlist
 except:
     SCRIPTPATH = os.path.join(CURRENT_DIR, "get-pip.py")
     PYTHONPATH = sys.executable
@@ -62,6 +69,7 @@ except:
         ui.messageBox(f'Failed to install ASE:\n{call2}')
     ui.messageBox("Required module installation has finished.")
     import ase.io
+    import ase.neighborlist
 
 
 # Load a config to create drop down input
@@ -114,6 +122,10 @@ class MoleculeCommandExecuteHandler(core.CommandEventHandler):
                     molecule.radiiSetName = ipt.selectedItem.name
                 elif ipt.id == "colorsSetName":
                     molecule.colorsSetName = ipt.selectedItem.name
+                elif ipt.id == "bondRadius":
+                    molecule.bondRadius = ipt.value
+                elif ipt.id == "bondEnabled":
+                    molecule.bondEnabled = ipt.value
             molecule.buildMolecule()
             args.isValidResult = True
 
@@ -163,14 +175,23 @@ class MoleculeCommandCreatedHandler(core.CommandCreatedEventHandler):
             cmd.destroy.add(onDestroy)
             handlers.append(onDestroy)
 
-            # Define the inputs
+            # Define the inputs and groups
             inputs: core.CommandInputs = cmd.commandInputs
-            inputs.addStringValueInput('moleculeName', 'Molecule Name', DEFAULT_SETNAMES["name"])
-
-            # Drop down list to designate settings
-            create_inputs_from_config(inputs, "radii")
-            create_inputs_from_config(inputs, "colors")
+            molecularInputs = inputs.addGroupCommandInput("molecule", "Molecular settings")
+            atomInputs = inputs.addGroupCommandInput("atom", "Atom settings")
+            bondInputs = inputs.addGroupCommandInput("bond", "Bond settings")
+            
+            # Add inputs of molecular settings
+            molecularInputs.children.addStringValueInput('moleculeName', 'molecular name', DEFAULT_SETNAMES["name"])
+            
+            # Add dropdown lists of atom settings
+            create_inputs_from_config(atomInputs.children, "radii")
+            create_inputs_from_config(atomInputs.children, "colors")
             ks = ",".join(settings["radii"]["VDW"].keys())
+
+            # Add inputs of bond settings
+            bondInputs.children.addBoolValueInput("bondEnabled", "enable bonds", True, "", False)
+            bondInputs.children.addFloatSpinnerCommandInput("bondRadius", "bond radius", "", 0.01, 100, 0.01, DEFAULT_SETNAMES["bond_radius"])
 
         except:
             if ui:
@@ -185,6 +206,8 @@ class Molecule:
         self._moleculeName = DEFAULT_SETNAMES["name"]
         self._radiiSetName = DEFAULT_SETNAMES["radii"]
         self._colorsSetName = DEFAULT_SETNAMES["colors"]
+        self._bondEnabled = DEFAULT_SETNAMES["bond_enabled"]
+        self._bondRadius = DEFAULT_SETNAMES["bond_radius"]
 
     @property
     def moleculeName(self):
@@ -207,6 +230,20 @@ class Molecule:
     def colorsSetName(self, value):
         self._colorsSetName = value
 
+    @property
+    def bondEnabled(self):
+        return self._bondEnabled
+    @bondEnabled.setter
+    def bondEnabled(self, value):
+        self._bondEnabled = value
+
+    @property
+    def bondRadius(self):
+        return self._bondRadius
+    @bondRadius.setter
+    def bondRadius(self, value):
+        self._bondRadius = value
+
     def buildMolecule(self):
         try:
             # Get material and appearance libraries
@@ -227,13 +264,14 @@ class Molecule:
             xyPlane = newComp.xYConstructionPlane
             radii_setting = settings["radii"][self.radiiSetName]
             colors_setting = settings["colors"][self.colorsSetName]
-            revolves = newComp.features.revolveFeatures
+            feats = newComp.features
+            revolves = feats.revolveFeatures
             element_counts = {}
-            
-            for element, position in zip(self.atoms.symbols, self.atoms.positions):
+               
+            neighborlist = ase.neighborlist.build_neighbor_list(self.atoms, bothways=True, self_interaction=False)
+            for idx, (element, position) in enumerate(zip(self.atoms.symbols, self.atoms.positions)):
 
                 # Element count, radius
-                # element = atom["element"]
                 if not element_counts.get(element):
                     element_counts[element] = 1
                 else:
@@ -266,6 +304,44 @@ class Molecule:
                 body = revolve.bodies[0]
                 body.name = element + str(element_count)
 
+                # Create half bonds
+                sweepBodies = []
+                if self.bondEnabled and self.bondRadius > 0.0:
+                    indices, offsets = neighborlist.get_neighbors(idx)
+                    for j, offset in zip(indices, offsets):
+
+                        # Create a path of half bond
+                        neighbor_position = self.atoms.positions[j] + offset @ self.atoms.get_cell()
+                        midpoint = (position + neighbor_position) / 2
+                        bondLine = sketch.sketchCurves.sketchLines.addByTwoPoints(
+                            core.Point3D.create(*position),
+                            core.Point3D.create(*midpoint)
+                        )
+                        bondPath = feats.createPath(bondLine)
+
+                        # Create a parpendicular plane for half bond
+                        planes = newComp.constructionPlanes
+                        planeInput = planes.createInput()
+                        planeInput.setByDistanceOnPath(bondPath, adsk.core.ValueInput.createByReal(0))
+                        plane = planes.add(planeInput)
+
+                        # Create a circle on a plane
+                        sketch_2 = sketches.add(plane)
+                        center = plane.geometry.origin
+                        center = sketch_2.modelToSketchSpace(center)
+                        # ui.messageBox(str(self.bondRadius))
+                        sketch_2.sketchCurves.sketchCircles.addByCenterRadius(center, self.bondRadius)
+                        profile = sketch_2.profiles[0]
+
+                        # Create sweep
+                        sweepFeats = feats.sweepFeatures
+                        sweepInput = sweepFeats.createInput(profile, bondPath, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+                        sweepInput.orientation = adsk.fusion.SweepOrientationTypes.PerpendicularOrientationType
+                        sweepFeat = sweepFeats.add(sweepInput)
+                        sweepBody = sweepFeat.bodies[0]
+                        sweepBody.name = "Bond_" + element + str(element_count) + "-" + str(j + 1)
+                        sweepBodies.append(sweepBody)
+
                 # Set appearance
                 element_color_name = f'{element}_color'
                 color = [int(rgb.strip()) for rgb in colors_setting[element].strip().split(",")]
@@ -281,6 +357,9 @@ class Molecule:
                     elementColor = favoriteAppearances.itemByName(element_color_name)
                 body.material = material
                 body.appearance = elementColor
+                for sweepBody in sweepBodies:
+                    sweepBody.material = material
+                    sweepBody.appearance = elementColor
 
         except:
             if ui:
