@@ -246,6 +246,14 @@ class Molecule:
 
     def buildMolecule(self):
         try:
+            # Create progress dialog.
+            progressDialog = ui.createProgressDialog()
+            progressDialog.cancelButtonText = 'Cancel'
+            progressDialog.isBackgroundTranslucent = False
+            progressDialog.isCancelButtonShown = True
+            atom_count = len(self.atoms.symbols)
+            progressDialog.show('Creating molecules...', '%v/%m atoms done', 0, atom_count)
+
             # Get material and appearance libraries
             materialLibs = app.materialLibraries
             presetMaterials = materialLibs.itemById(MATERIAL_LIB_ID).materials
@@ -361,6 +369,14 @@ class Molecule:
                 for sweepBody in sweepBodies:
                     sweepBody.material = material
                     sweepBody.appearance = elementColor
+
+                # Update / Cancel progress
+                if progressDialog.wasCancelled:
+                    break
+                progressDialog.progressValue = idx + 1
+            
+            # Hide the progress dialog at the end.
+            progressDialog.hide()
 
         except:
             if ui:
