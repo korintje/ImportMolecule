@@ -493,7 +493,7 @@ def run(context):
         dlg = ui.createFileDialog()
         dlg.title = 'Open Molecular Strucure File'
         dlg.filter = 'Molecular structure format ( \
-            *.gjf;*.mol;*.pdb;*.xyz;*.cif;*.gen \
+            *.gjf;*.mol;*.mol2;*.pdb;*.xyz;*.cif;*.gen;*.sdf;*.com;*.vasp \
         );;All Files (*.*)'
         if dlg.showOpen() != core.DialogResults.DialogOK :
             return
