@@ -255,6 +255,7 @@ class Molecule:
 
             # global newComp
             newComp = createNewComponent()
+            newComp.name = self.moleculeName
             if newComp is None:
                 ui.messageBox('New component failed to create', 'New Component Failed')
                 return
