@@ -26,6 +26,7 @@ DEFAULT_SETNAMES = {
     "name": "Molecule",
     "radii": "Uniform",
     "colors": "Default",
+    "atom_scale": 1.0,
     "bond_radius": 0.1,
     "bond_enabled": False
 }
@@ -122,6 +123,8 @@ class MoleculeCommandExecuteHandler(core.CommandEventHandler):
                     molecule.radiiSetName = ipt.selectedItem.name
                 elif ipt.id == "colorsSetName":
                     molecule.colorsSetName = ipt.selectedItem.name
+                elif ipt.id == "atomScale":
+                    molecule.atomScale = ipt.value
                 elif ipt.id == "bondRadius":
                     molecule.bondRadius = ipt.value
                 elif ipt.id == "bondEnabled":
@@ -188,6 +191,7 @@ class MoleculeCommandCreatedHandler(core.CommandCreatedEventHandler):
             create_inputs_from_config(atomInputs.children, "radii")
             create_inputs_from_config(atomInputs.children, "colors")
             ks = ",".join(settings["radii"]["VDW"].keys())
+            atomInputs.children.addFloatSpinnerCommandInput("atomScale", "atom scale", "", 0.1, 10, 0.1, DEFAULT_SETNAMES["atom_scale"])
 
             # Add inputs of bond settings
             bondInputs.children.addBoolValueInput("bondEnabled", "enable bonds", True, "", False)
@@ -206,6 +210,7 @@ class Molecule:
         self._moleculeName = DEFAULT_SETNAMES["name"]
         self._radiiSetName = DEFAULT_SETNAMES["radii"]
         self._colorsSetName = DEFAULT_SETNAMES["colors"]
+        self._atomScale = DEFAULT_SETNAMES["atom_scale"]
         self._bondEnabled = DEFAULT_SETNAMES["bond_enabled"]
         self._bondRadius = DEFAULT_SETNAMES["bond_radius"]
 
@@ -229,6 +234,13 @@ class Molecule:
     @colorsSetName.setter
     def colorsSetName(self, value):
         self._colorsSetName = value
+
+    @property
+    def atomScale(self):
+        return self._atomScale
+    @atomScale.setter
+    def atomScale(self, value):
+        self._atomScale = value
 
     @property
     def bondEnabled(self):
@@ -292,7 +304,7 @@ class Molecule:
                 
                 # Draw a circle.
                 origin = core.Point3D.create(*position)
-                radius = float(radii_setting[element]) / 100
+                radius = float(radii_setting[element]) / 100 * self.atomScale
                 circle1 = sketch.sketchCurves.sketchCircles.addByCenterRadius(origin, radius)
                 
                 # Draw a line to use as the axis of revolution.
