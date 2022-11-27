@@ -28,7 +28,11 @@ DEFAULT_SETNAMES = {
     "colors": "Default",
     "atom_scale": 1.0,
     "bond_radius": 0.1,
-    "bond_enabled": False
+    "bond_enabled": False,
+    "use_slab": False,
+    "mirror_indices": [1, 1, 1],
+    "thickness": 1,
+    "repeat_numbers": [1, 1, 1],
 }
 DEFAULT_MATERIAL_ID = 'PrismMaterial-022'
 DEFAULT_APPEARANCE_ID = 'Prism-374'
@@ -50,6 +54,7 @@ ALL_ELEMENTS = [
 # Try to import ASE module. If not exist, first install ASE and import it.
 try:
     import ase.io
+    import ase.build
     import ase.neighborlist
 except:
     SCRIPTPATH = os.path.join(CURRENT_DIR, "get-pip.py")
@@ -70,6 +75,7 @@ except:
         ui.messageBox(f'Failed to install ASE:\n{call2}')
     ui.messageBox("Required module installation has finished.")
     import ase.io
+    import ase.build
     import ase.neighborlist
 
 
@@ -129,7 +135,24 @@ class MoleculeCommandExecuteHandler(core.CommandEventHandler):
                     molecule.bondRadius = ipt.value
                 elif ipt.id == "bondEnabled":
                     molecule.bondEnabled = ipt.value
-            molecule.buildMolecule()
+                elif ipt.id == "useSlab":
+                    molecule.useSlab = ipt.value
+                elif ipt.id == "mirror_h":
+                    molecule.mirrorIndices[0] = ipt.value
+                elif ipt.id == "mirror_k":
+                    molecule.mirrorIndices[1] = ipt.value
+                elif ipt.id == "mirror_l":
+                    molecule.mirrorIndices[2] = ipt.value
+                elif ipt.id == "thickness":
+                    molecule.thickness = ipt.value
+                elif ipt.id == "repeat_a":
+                    molecule.repeatNumbers[0] = ipt.value
+                elif ipt.id == "repeat_b":
+                    molecule.repeatNumbers[1] = ipt.value
+                elif ipt.id == "repeat_c":
+                    molecule.repeatNumbers[2] = ipt.value
+                
+            molecule.buildMoleculeWrapper()
             args.isValidResult = True
 
         except:
@@ -183,6 +206,7 @@ class MoleculeCommandCreatedHandler(core.CommandCreatedEventHandler):
             molecularInputs = inputs.addGroupCommandInput("molecule", "Molecular settings")
             atomInputs = inputs.addGroupCommandInput("atom", "Atom settings")
             bondInputs = inputs.addGroupCommandInput("bond", "Bond settings")
+            slabInputs = inputs.addGroupCommandInput("slab", "Slab settings")
             
             # Add inputs of molecular settings
             molecularInputs.children.addStringValueInput('moleculeName', 'molecular name', DEFAULT_SETNAMES["name"])
@@ -196,6 +220,16 @@ class MoleculeCommandCreatedHandler(core.CommandCreatedEventHandler):
             # Add inputs of bond settings
             bondInputs.children.addBoolValueInput("bondEnabled", "enable bonds", True, "", False)
             bondInputs.children.addFloatSpinnerCommandInput("bondRadius", "bond radius", "", 0.01, 100, 0.01, DEFAULT_SETNAMES["bond_radius"])
+
+            # Add inputs of slab settings
+            slabInputs.children.addBoolValueInput("useSlab", "Use slab", True, "", False)
+            slabInputs.children.addIntegerSpinnerCommandInput("mirror_h", "mirror index h", 0, 100, 1, DEFAULT_SETNAMES["mirror_indices"][0])
+            slabInputs.children.addIntegerSpinnerCommandInput("mirror_k", "mirror index k", 0, 100, 1, DEFAULT_SETNAMES["mirror_indices"][1])
+            slabInputs.children.addIntegerSpinnerCommandInput("mirror_l", "mirror index l", 0, 100, 1, DEFAULT_SETNAMES["mirror_indices"][2])
+            slabInputs.children.addIntegerSpinnerCommandInput("thickness", "thickness", 1, 100, 1, DEFAULT_SETNAMES["thickness"])
+            slabInputs.children.addIntegerSpinnerCommandInput("repeat_a", "repeat number a", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][0])
+            slabInputs.children.addIntegerSpinnerCommandInput("repeat_b", "repeat number b", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][1])
+            slabInputs.children.addIntegerSpinnerCommandInput("repeat_c", "repeat number c", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][2])
 
         except:
             if ui:
@@ -213,6 +247,10 @@ class Molecule:
         self._atomScale = DEFAULT_SETNAMES["atom_scale"]
         self._bondEnabled = DEFAULT_SETNAMES["bond_enabled"]
         self._bondRadius = DEFAULT_SETNAMES["bond_radius"]
+        self._useSlab = DEFAULT_SETNAMES["use_slab"]
+        self._mirrorIndices = DEFAULT_SETNAMES["mirror_indices"]
+        self._thickness = DEFAULT_SETNAMES["thickness"]
+        self._repeatNumbers = DEFAULT_SETNAMES["repeat_numbers"]
 
     @property
     def moleculeName(self):
@@ -256,14 +294,58 @@ class Molecule:
     def bondRadius(self, value):
         self._bondRadius = value
 
-    def buildMolecule(self):
+    @property
+    def useSlab(self):
+        return self._useSlab
+    @useSlab.setter
+    def useSlab(self, value):
+        self._useSlab = value
+
+    @property
+    def mirrorIndices(self):
+        return self._mirrorIndices
+    @mirrorIndices.setter
+    def mirrorIndices(self, value):
+        self._mirrorIndices = value
+
+    @property
+    def thickness(self):
+        return self._thickness
+    @thickness.setter
+    def thickness(self, value):
+        self._thickness = value
+
+    @property
+    def repeatNumbers(self):
+        return self._repeatNumbers
+    @repeatNumbers.setter
+    def repeatNumbers(self, value):
+        self._repeatNumbers = value
+
+    def buildMoleculeWrapper(self):
+        try:
+            if self.useSlab:
+                slab = ase.build.surface(
+                    self.atoms,
+                    tuple(self.mirrorIndices), 
+                    self.thickness
+                )
+                repeated_slab = slab.repeat(tuple(self.repeatNumbers))  
+                self.buildMolecule(repeated_slab)
+            else:
+                self.buildMolecule(self.atoms)
+        except:
+            if ui:
+                ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))            
+
+    def buildMolecule(self, target_atoms):
         try:
             # Create progress dialog.
             progressDialog = ui.createProgressDialog()
             progressDialog.cancelButtonText = 'Cancel'
             progressDialog.isBackgroundTranslucent = False
             progressDialog.isCancelButtonShown = True
-            atom_count = len(self.atoms.symbols)
+            atom_count = len(target_atoms.symbols)
             progressDialog.show('Creating molecules...', '%v/%m atoms done', 0, atom_count)
 
             # Get material and appearance libraries
@@ -289,8 +371,8 @@ class Molecule:
             revolves = feats.revolveFeatures
             element_counts = {}
                
-            neighborlist = ase.neighborlist.build_neighbor_list(self.atoms, bothways=True, self_interaction=False)
-            for idx, (element, position) in enumerate(zip(self.atoms.symbols, self.atoms.positions)):
+            neighborlist = ase.neighborlist.build_neighbor_list(target_atoms, bothways=True, self_interaction=False)
+            for idx, (element, position) in enumerate(zip(target_atoms.symbols, target_atoms.positions)):
 
                 # Element count, radius
                 if not element_counts.get(element):
@@ -332,7 +414,7 @@ class Molecule:
                     for j, offset in zip(indices, offsets):
 
                         # Create a path of half bond
-                        neighbor_position = self.atoms.positions[j] + offset @ self.atoms.get_cell()
+                        neighbor_position = target_atoms.positions[j] + offset @ target_atoms.get_cell()
                         midpoint = (position + neighbor_position) / 2
                         bondLine = sketch.sketchCurves.sketchLines.addByTwoPoints(
                             core.Point3D.create(*position),
