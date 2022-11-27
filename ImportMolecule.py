@@ -206,7 +206,6 @@ class MoleculeCommandCreatedHandler(core.CommandCreatedEventHandler):
             molecularInputs = inputs.addGroupCommandInput("molecule", "Molecular settings")
             atomInputs = inputs.addGroupCommandInput("atom", "Atom settings")
             bondInputs = inputs.addGroupCommandInput("bond", "Bond settings")
-            slabInputs = inputs.addGroupCommandInput("slab", "Slab settings")
             
             # Add inputs of molecular settings
             molecularInputs.children.addStringValueInput('moleculeName', 'molecular name', DEFAULT_SETNAMES["name"])
@@ -222,14 +221,16 @@ class MoleculeCommandCreatedHandler(core.CommandCreatedEventHandler):
             bondInputs.children.addFloatSpinnerCommandInput("bondRadius", "bond radius", "", 0.01, 100, 0.01, DEFAULT_SETNAMES["bond_radius"])
 
             # Add inputs of slab settings
-            slabInputs.children.addBoolValueInput("useSlab", "Use slab", True, "", False)
-            slabInputs.children.addIntegerSpinnerCommandInput("mirror_h", "mirror index h", 0, 100, 1, DEFAULT_SETNAMES["mirror_indices"][0])
-            slabInputs.children.addIntegerSpinnerCommandInput("mirror_k", "mirror index k", 0, 100, 1, DEFAULT_SETNAMES["mirror_indices"][1])
-            slabInputs.children.addIntegerSpinnerCommandInput("mirror_l", "mirror index l", 0, 100, 1, DEFAULT_SETNAMES["mirror_indices"][2])
-            slabInputs.children.addIntegerSpinnerCommandInput("thickness", "thickness", 1, 100, 1, DEFAULT_SETNAMES["thickness"])
-            slabInputs.children.addIntegerSpinnerCommandInput("repeat_a", "repeat number a", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][0])
-            slabInputs.children.addIntegerSpinnerCommandInput("repeat_b", "repeat number b", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][1])
-            slabInputs.children.addIntegerSpinnerCommandInput("repeat_c", "repeat number c", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][2])
+            if any(self.atoms.get_pbc()):
+                slabInputs = inputs.addGroupCommandInput("slab", "Slab settings")
+                slabInputs.children.addBoolValueInput("useSlab", "Use slab", True, "", False)
+                slabInputs.children.addIntegerSpinnerCommandInput("mirror_h", "mirror index h", 0, 100, 1, DEFAULT_SETNAMES["mirror_indices"][0])
+                slabInputs.children.addIntegerSpinnerCommandInput("mirror_k", "mirror index k", 0, 100, 1, DEFAULT_SETNAMES["mirror_indices"][1])
+                slabInputs.children.addIntegerSpinnerCommandInput("mirror_l", "mirror index l", 0, 100, 1, DEFAULT_SETNAMES["mirror_indices"][2])
+                slabInputs.children.addIntegerSpinnerCommandInput("thickness", "thickness", 1, 100, 1, DEFAULT_SETNAMES["thickness"])
+                slabInputs.children.addIntegerSpinnerCommandInput("repeat_a", "repeat for x", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][0])
+                slabInputs.children.addIntegerSpinnerCommandInput("repeat_b", "repeat for y", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][1])
+                # slabInputs.children.addIntegerSpinnerCommandInput("repeat_c", "repeat number c", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][2])
 
         except:
             if ui:
@@ -324,7 +325,7 @@ class Molecule:
 
     def buildMoleculeWrapper(self):
         try:
-            if self.useSlab:
+            if self.useSlab and any(self.atoms.get_pbc()):
                 slab = ase.build.surface(
                     self.atoms,
                     tuple(self.mirrorIndices), 
@@ -340,13 +341,6 @@ class Molecule:
 
     def buildMolecule(self, target_atoms):
         try:
-            # Create progress dialog.
-            progressDialog = ui.createProgressDialog()
-            progressDialog.cancelButtonText = 'Cancel'
-            progressDialog.isBackgroundTranslucent = False
-            progressDialog.isCancelButtonShown = True
-            atom_count = len(target_atoms.symbols)
-            progressDialog.show('Creating molecules...', '%v/%m atoms done', 0, atom_count)
 
             # Get material and appearance libraries
             materialLibs = app.materialLibraries
@@ -361,6 +355,14 @@ class Molecule:
             if newComp is None:
                 ui.messageBox('New component failed to create', 'New Component Failed')
                 return
+
+            # Create progress dialog.
+            progressDialog = ui.createProgressDialog()
+            progressDialog.cancelButtonText = 'Cancel'
+            progressDialog.isBackgroundTranslucent = False
+            progressDialog.isCancelButtonShown = True
+            atom_count = len(target_atoms.symbols)
+            progressDialog.show('Creating molecules...', '%v/%m atoms done', 0, atom_count, 1)
 
             # Create a new sketch.
             sketches = newComp.sketches
