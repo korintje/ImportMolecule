@@ -24,6 +24,7 @@ CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
 RESOURCE_DIR = os.path.join(CURRENT_DIR, 'resources')
 DEFAULT_SETNAMES = {
     "name": "Molecule",
+    "atom_enabled": True,
     "radii": "Uniform",
     "colors": "Default",
     "atom_scale": 1.0,
@@ -33,6 +34,7 @@ DEFAULT_SETNAMES = {
     "mirror_indices": [1, 1, 1],
     "thickness": 1,
     "repeat_numbers": [1, 1, 1],
+    "modeling_mode": "Direct",
 }
 DEFAULT_MATERIAL_ID = 'PrismMaterial-022'
 DEFAULT_APPEARANCE_ID = 'Prism-374'
@@ -125,6 +127,8 @@ class MoleculeCommandExecuteHandler(core.CommandEventHandler):
             for ipt in inputs:
                 if ipt.id == "moleculeName":
                     molecule.moleculeName = ipt.value
+                elif ipt.id == "atomEnabled":
+                    molecule.atomEnabled = ipt.value
                 elif ipt.id == "radiiSetName":
                     molecule.radiiSetName = ipt.selectedItem.name
                 elif ipt.id == "colorsSetName":
@@ -151,6 +155,8 @@ class MoleculeCommandExecuteHandler(core.CommandEventHandler):
                     molecule.repeatNumbers[1] = ipt.value
                 elif ipt.id == "repeat_c":
                     molecule.repeatNumbers[2] = ipt.value
+                elif ipt.id == "modeling_mode":
+                    molecule.modelingMode = ipt.selectedItem.name
                 
             molecule.buildMoleculeWrapper()
             args.isValidResult = True
@@ -206,18 +212,20 @@ class MoleculeCommandCreatedHandler(core.CommandCreatedEventHandler):
             molecularInputs = inputs.addGroupCommandInput("molecule", "Molecular settings")
             atomInputs = inputs.addGroupCommandInput("atom", "Atom settings")
             bondInputs = inputs.addGroupCommandInput("bond", "Bond settings")
+            otherInputs = inputs.addGroupCommandInput("other", "Other settings")
             
             # Add inputs of molecular settings
             molecularInputs.children.addStringValueInput('moleculeName', 'molecular name', DEFAULT_SETNAMES["name"])
             
             # Add dropdown lists of atom settings
+            atomInputs.children.addBoolValueInput("atomEnabled", "draw atom spheres", True, "", DEFAULT_SETNAMES["atom_enabled"])
             create_inputs_from_config(atomInputs.children, "radii")
             create_inputs_from_config(atomInputs.children, "colors")
             ks = ",".join(settings["radii"]["VDW"].keys())
             atomInputs.children.addFloatSpinnerCommandInput("atomScale", "atom scale", "", 0.1, 10, 0.1, DEFAULT_SETNAMES["atom_scale"])
 
             # Add inputs of bond settings
-            bondInputs.children.addBoolValueInput("bondEnabled", "enable bonds", True, "", False)
+            bondInputs.children.addBoolValueInput("bondEnabled", "draw bonds", True, "", DEFAULT_SETNAMES["bond_enabled"])
             bondInputs.children.addFloatSpinnerCommandInput("bondRadius", "bond radius", "", 0.01, 100, 0.01, DEFAULT_SETNAMES["bond_radius"])
 
             # Add inputs of slab settings
@@ -231,6 +239,11 @@ class MoleculeCommandCreatedHandler(core.CommandCreatedEventHandler):
                 slabInputs.children.addIntegerSpinnerCommandInput("repeat_a", "repeat for x", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][0])
                 slabInputs.children.addIntegerSpinnerCommandInput("repeat_b", "repeat for y", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][1])
                 # slabInputs.children.addIntegerSpinnerCommandInput("repeat_c", "repeat number c", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][2])
+            
+            # Add inputs of Fusion 360 settings
+            mode_input = otherInputs.children.addDropDownCommandInput("modeling_mode", "modeling mode", TLSTYLE)
+            mode_input.listItems.add("Direct", True, "")
+            mode_input.listItems.add("Parametric", False, "")
 
         except:
             if ui:
@@ -243,6 +256,7 @@ class Molecule:
     def __init__(self, atoms):
         self.atoms = atoms
         self._moleculeName = DEFAULT_SETNAMES["name"]
+        self._atomEnabled = DEFAULT_SETNAMES["atom_enabled"]
         self._radiiSetName = DEFAULT_SETNAMES["radii"]
         self._colorsSetName = DEFAULT_SETNAMES["colors"]
         self._atomScale = DEFAULT_SETNAMES["atom_scale"]
@@ -252,6 +266,7 @@ class Molecule:
         self._mirrorIndices = DEFAULT_SETNAMES["mirror_indices"]
         self._thickness = DEFAULT_SETNAMES["thickness"]
         self._repeatNumbers = DEFAULT_SETNAMES["repeat_numbers"]
+        self._modelingMode = DEFAULT_SETNAMES["modeling_mode"]
 
     @property
     def moleculeName(self):
@@ -259,6 +274,13 @@ class Molecule:
     @moleculeName.setter
     def moleculeName(self, value):
         self._moleculeName = value
+
+    @property
+    def atomEnabled(self):
+        return self._atomEnabled
+    @atomEnabled.setter
+    def atomEnabled(self, value):
+        self._atomEnabled = value
 
     @property
     def radiiSetName(self):
@@ -323,6 +345,13 @@ class Molecule:
     def repeatNumbers(self, value):
         self._repeatNumbers = value
 
+    @property
+    def modelingMode(self):
+        return self._modelingMode
+    @modelingMode.setter
+    def modelingMode(self, value):
+        self._modelingMode = value
+
     def buildMoleculeWrapper(self):
         try:
             if self.useSlab and any(self.atoms.get_pbc()):
@@ -332,12 +361,125 @@ class Molecule:
                     self.thickness
                 )
                 repeated_slab = slab.repeat(tuple(self.repeatNumbers))  
-                self.buildMolecule(repeated_slab)
+                if self.modelingMode == "parametric":
+                    self.buildMolecule(repeated_slab)
+                else:
+                    self.buildMoleculeDirect(repeated_slab)
             else:
-                self.buildMolecule(self.atoms)
+                if self.modelingMode == "parametric":
+                    self.buildMolecule(self.atoms)
+                else:
+                    self.buildMoleculeDirect(self.atoms)
         except:
             if ui:
                 ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))            
+
+    def buildMoleculeDirect(self, target_atoms):
+        try:
+
+            # Get material and appearance libraries
+            materialLibs = app.materialLibraries
+            presetMaterials = materialLibs.itemById(MATERIAL_LIB_ID).materials
+            material = presetMaterials.itemById(DEFAULT_MATERIAL_ID)
+            presetAppearances = materialLibs.itemById(APPEARANCE_LIB_ID).appearances
+            favoriteAppearances = design.appearances
+
+            # Set direct mode
+            design.designType = adsk.fusion.DesignTypes.DirectDesignType
+
+            # Create new component
+            comp = createNewComponent()
+            comp.name = self.moleculeName
+            if comp is None:
+                ui.messageBox('New component failed to create', 'New Component Failed')
+                return
+            bodies = comp.bRepBodies
+
+            # Create progress dialog.
+            progressDialog = ui.createProgressDialog()
+            progressDialog.cancelButtonText = 'Cancel'
+            progressDialog.isBackgroundTranslucent = False
+            progressDialog.isCancelButtonShown = True
+            atom_count = len(target_atoms.symbols)
+            progressDialog.show('Creating molecules...', '%v/%m atoms done', 0, atom_count, 1)
+
+            # Load settings
+            radii_setting = settings["radii"][self.radiiSetName]
+            colors_setting = settings["colors"][self.colorsSetName]
+            element_counts = {}
+            
+            # Get neighbor atom list
+            neighborlist = ase.neighborlist.build_neighbor_list(target_atoms, bothways=True, self_interaction=False)
+
+            # TemporaryBRepManager
+            tmpBrep = adsk.fusion.TemporaryBRepManager.get()
+
+            for idx, (element, position) in enumerate(zip(target_atoms.symbols, target_atoms.positions)):
+
+                # Bodies created in the current loop
+                current_bodies = []
+
+                # Element count, radius
+                if not element_counts.get(element):
+                    element_counts[element] = 1
+                else:
+                    element_counts[element] += 1
+                element_count = element_counts[element]
+
+                # Create atom sphere
+                if self.atomEnabled:
+                    origin = core.Point3D.create(*position)
+                    radius = float(radii_setting[element]) / 100 * self.atomScale
+                    tmpAtomBody = tmpBrep.createSphere(origin, radius)
+                    atomBody = bodies.add(tmpAtomBody)
+                    atomBody.name = element + str(element_count)
+                    current_bodies.append(atomBody)
+
+                # Create half bonds
+                sweepBodies = []
+                if self.bondEnabled and self.bondRadius > 0.0:
+                    indices, offsets = neighborlist.get_neighbors(idx)
+                    for j, offset in zip(indices, offsets):
+                        neighbor_position = target_atoms.positions[j] + offset @ target_atoms.get_cell()
+                        midpoint = (position + neighbor_position) / 2
+                        tmpBondBody = tmpBrep.createCylinderOrCone(
+                            core.Point3D.create(*position),
+                            self.bondRadius,
+                            core.Point3D.create(*midpoint),
+                            self.bondRadius
+                        )
+                        bondBody = bodies.add(tmpBondBody)
+                        bondBody.name = "Bond_" + element + str(element_count) + "-" + str(j + 1)
+                        current_bodies.append(bondBody)
+
+                # Set appearance
+                element_color_name = f'{element}_color'
+                color = [int(rgb.strip()) for rgb in colors_setting[element].strip().split(",")]
+                try:
+                    elementColor = favoriteAppearances.itemByName(element_color_name)
+                except:
+                    elementColor = None
+                if not elementColor:
+                    baseColor = presetAppearances.itemById(DEFAULT_APPEARANCE_ID)
+                    newColor = favoriteAppearances.addByCopy(baseColor, element_color_name)
+                    colorProp = core.ColorProperty.cast(newColor.appearanceProperties.itemById('opaque_albedo'))
+                    colorProp.value = core.Color.create(*color, 0)
+                    elementColor = favoriteAppearances.itemByName(element_color_name)
+                for body in current_bodies:
+                    body.material = material
+                    body.appearance = elementColor
+
+                # Update / Cancel progress
+                if progressDialog.wasCancelled:
+                    break
+                progressDialog.progressValue = idx + 1
+            
+            # Hide the progress dialog at the end.
+            progressDialog.hide()
+
+        except:
+            if ui:
+                ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))     
 
     def buildMolecule(self, target_atoms):
         try:
@@ -385,29 +527,31 @@ class Molecule:
                 
                 # Add a sketch
                 sketch = sketches.add(xyPlane)
-                
-                # Draw a circle.
-                origin = core.Point3D.create(*position)
-                radius = float(radii_setting[element]) / 100 * self.atomScale
-                circle1 = sketch.sketchCurves.sketchCircles.addByCenterRadius(origin, radius)
-                
-                # Draw a line to use as the axis of revolution.
-                lines = sketch.sketchCurves.sketchLines
-                edge_0 = core.Point3D.create(position[0] + radius, position[1], position[2])
-                edge_1 = core.Point3D.create(position[0] - radius, position[1], position[2])
-                axisLine = lines.addByTwoPoints(edge_0, edge_1)
+                sketch.isComputeDeferred = False
 
-                # Get the profile defined by the circle.
-                prof = sketch.profiles.item(0)
+                if self.atomEnabled:
+                    # Draw a circle.
+                    origin = core.Point3D.create(*position)
+                    radius = float(radii_setting[element]) / 100 * self.atomScale
+                    circle1 = sketch.sketchCurves.sketchCircles.addByCenterRadius(origin, radius)
+                    
+                    # Draw a line to use as the axis of revolution.
+                    lines = sketch.sketchCurves.sketchLines
+                    edge_0 = core.Point3D.create(position[0] + radius, position[1], position[2])
+                    edge_1 = core.Point3D.create(position[0] - radius, position[1], position[2])
+                    axisLine = lines.addByTwoPoints(edge_0, edge_1)
 
-                # Create an revolution input to be able to define the input needed for a revolution
-                revInput = revolves.createInput(prof, axisLine, NBFEATURE)
-                _result = revInput.setAngleExtent(False, ANGLE_2PI)
+                    # Get the profile defined by the circle.
+                    prof = sketch.profiles.item(0)
 
-                # Create the extrusion.
-                revolve = revolves.add(revInput)
-                body = revolve.bodies[0]
-                body.name = element + str(element_count)
+                    # Create an revolution input to be able to define the input needed for a revolution
+                    revInput = revolves.createInput(prof, axisLine, NBFEATURE)
+                    _result = revInput.setAngleExtent(False, ANGLE_2PI)
+
+                    # Create the extrusion.
+                    revolve = revolves.add(revInput)
+                    body = revolve.bodies[0]
+                    body.name = element + str(element_count)
 
                 # Create half bonds
                 sweepBodies = []
@@ -432,6 +576,7 @@ class Molecule:
 
                         # Create a circle on a plane
                         sketch_2 = sketches.add(plane)
+                        sketch_2.isComputeDeferred = False
                         center = plane.geometry.origin
                         center = sketch_2.modelToSketchSpace(center)
                         # ui.messageBox(str(self.bondRadius))
@@ -460,8 +605,9 @@ class Molecule:
                     colorProp = core.ColorProperty.cast(newColor.appearanceProperties.itemById('opaque_albedo'))
                     colorProp.value = core.Color.create(*color, 0)
                     elementColor = favoriteAppearances.itemByName(element_color_name)
-                body.material = material
-                body.appearance = elementColor
+                if self.atomEnabled:
+                    body.material = material
+                    body.appearance = elementColor
                 for sweepBody in sweepBodies:
                     sweepBody.material = material
                     sweepBody.appearance = elementColor
@@ -523,4 +669,5 @@ def run(context):
     except:
         if ui:
             ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+
 
