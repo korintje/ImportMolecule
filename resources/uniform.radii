@@ -9,4 +9,4 @@ ref_urls = []
 default_value = 30
 
 [elements]
-# No description because all atom radiis is set a certain value. 
+# No description because all atom radii are 'default_value'. 

@@ -7,7 +7,6 @@ description = Classic CPK radii
 unit = pm
 ref_urls = ["https://github.com/zulman/qutemol/blob/a7ca8add0683cd311cbcdbed5c7e49cb1681fb61/src/AtomColor.cpp", "http://www.umass.edu/microbio/rasmol/rasbonds.htm", "http://www.imb-jena.de/ImgLibDoc/glossary/IMAGE_VDWR.html"] 
 default_value = 150
-# parent = none
 
 [elements]
 H  = 110

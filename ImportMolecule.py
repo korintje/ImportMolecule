@@ -31,15 +31,12 @@ DEFAULT_SETNAMES = {
     "bond_radius": 0.1,
     "bond_enabled": False,
     "use_slab": False,
-    "mirror_indices": [1, 1, 1],
+    "mirror_indices": [0, 0, 1],
     "thickness": 1,
     "repeat_numbers": [1, 1, 1],
     "modeling_mode": "Direct",
 }
-DEFAULT_MATERIAL_ID = 'PrismMaterial-022'
-DEFAULT_APPEARANCE_ID = 'Prism-374'
-MATERIAL_LIB_ID = 'C1EEA57C-3F56-45FC-B8CB-A9EC46A9994C'
-APPEARANCE_LIB_ID = 'BA5EE55E-9982-449B-9D66-9F036540E140'
+
 ANGLE_2PI = core.ValueInput.createByReal(2 * math.pi)
 TLSTYLE = core.DropDownStyles.TextListDropDownStyle
 NBFEATURE = fusion.FeatureOperations.NewBodyFeatureOperation
@@ -52,6 +49,14 @@ ALL_ELEMENTS = [
     "Fr", "Ra", "Ac", "Th", "Pa", "U", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm", "Md", "No", "Lr", "Rf",
     "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "Cn", "Nh", "Fl", "Mc", "Lv", "Ts", "Og"
 ]
+
+# Appearance config
+_cfg = configparser.ConfigParser()
+_cfg.read(os.path.join(RESOURCE_DIR, "appearances"))
+_options = _cfg["options"]
+DEFAULT_APPEARANCE_NAME = _options.get("default_value")
+APPEARANCE_LIB_ID = _options.get("appearance_lib_id")
+APPEARANCE_IDS = _cfg["ids"]
 
 # Try to import ASE module. If not exist, first install ASE and import it.
 try:
@@ -124,6 +129,7 @@ class MoleculeCommandExecuteHandler(core.CommandEventHandler):
             command = args.firingEvent.sender
             inputs = command.commandInputs
             molecule = Molecule(self.atoms)
+            slabActivated = True
             for ipt in inputs:
                 if ipt.id == "moleculeName":
                     molecule.moleculeName = ipt.value
@@ -141,20 +147,30 @@ class MoleculeCommandExecuteHandler(core.CommandEventHandler):
                     molecule.bondEnabled = ipt.value
                 elif ipt.id == "useSlab":
                     molecule.useSlab = ipt.value
+                    slabActivated = True if ipt.value else False
                 elif ipt.id == "mirror_h":
                     molecule.mirrorIndices[0] = ipt.value
+                    ipt.isEnabled = True if slabActivated else False
                 elif ipt.id == "mirror_k":
                     molecule.mirrorIndices[1] = ipt.value
+                    ipt.isEnabled = True if slabActivated else False
                 elif ipt.id == "mirror_l":
                     molecule.mirrorIndices[2] = ipt.value
+                    ipt.isEnabled = True if slabActivated else False
                 elif ipt.id == "thickness":
                     molecule.thickness = ipt.value
+                    ipt.isEnabled = True if slabActivated else False
                 elif ipt.id == "repeat_a":
                     molecule.repeatNumbers[0] = ipt.value
+                    ipt.isEnabled = True if slabActivated else False
                 elif ipt.id == "repeat_b":
                     molecule.repeatNumbers[1] = ipt.value
+                    ipt.isEnabled = True if slabActivated else False
                 elif ipt.id == "repeat_c":
                     molecule.repeatNumbers[2] = ipt.value
+                    ipt.isEnabled = True if slabActivated else False
+                elif ipt.id == "appearance":
+                    molecule.appearanceID = APPEARANCE_IDS[ipt.selectedItem.name]
                 elif ipt.id == "modeling_mode":
                     molecule.modelingMode = ipt.selectedItem.name
                 
@@ -212,7 +228,6 @@ class MoleculeCommandCreatedHandler(core.CommandCreatedEventHandler):
             molecularInputs = inputs.addGroupCommandInput("molecule", "Molecular settings")
             atomInputs = inputs.addGroupCommandInput("atom", "Atom settings")
             bondInputs = inputs.addGroupCommandInput("bond", "Bond settings")
-            otherInputs = inputs.addGroupCommandInput("other", "Other settings")
             
             # Add inputs of molecular settings
             molecularInputs.children.addStringValueInput('moleculeName', 'molecular name', DEFAULT_SETNAMES["name"])
@@ -232,15 +247,22 @@ class MoleculeCommandCreatedHandler(core.CommandCreatedEventHandler):
             if any(self.atoms.get_pbc()):
                 slabInputs = inputs.addGroupCommandInput("slab", "Slab settings")
                 slabInputs.children.addBoolValueInput("useSlab", "Use slab", True, "", False)
-                slabInputs.children.addIntegerSpinnerCommandInput("mirror_h", "mirror index h", 0, 100, 1, DEFAULT_SETNAMES["mirror_indices"][0])
-                slabInputs.children.addIntegerSpinnerCommandInput("mirror_k", "mirror index k", 0, 100, 1, DEFAULT_SETNAMES["mirror_indices"][1])
-                slabInputs.children.addIntegerSpinnerCommandInput("mirror_l", "mirror index l", 0, 100, 1, DEFAULT_SETNAMES["mirror_indices"][2])
-                slabInputs.children.addIntegerSpinnerCommandInput("thickness", "thickness", 1, 100, 1, DEFAULT_SETNAMES["thickness"])
-                slabInputs.children.addIntegerSpinnerCommandInput("repeat_a", "repeat for x", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][0])
-                slabInputs.children.addIntegerSpinnerCommandInput("repeat_b", "repeat for y", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][1])
+                _h = slabInputs.children.addIntegerSpinnerCommandInput("mirror_h", "mirror index h", 0, 100, 1, DEFAULT_SETNAMES["mirror_indices"][0])
+                _k = slabInputs.children.addIntegerSpinnerCommandInput("mirror_k", "mirror index k", 0, 100, 1, DEFAULT_SETNAMES["mirror_indices"][1])
+                _l = slabInputs.children.addIntegerSpinnerCommandInput("mirror_l", "mirror index l", 0, 100, 1, DEFAULT_SETNAMES["mirror_indices"][2])
+                _a = slabInputs.children.addIntegerSpinnerCommandInput("repeat_a", "repeat for x", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][0])
+                _b = slabInputs.children.addIntegerSpinnerCommandInput("repeat_b", "repeat for y", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][1])
+                _t = slabInputs.children.addIntegerSpinnerCommandInput("thickness", "repeat for z", 1, 100, 1, DEFAULT_SETNAMES["thickness"])
                 # slabInputs.children.addIntegerSpinnerCommandInput("repeat_c", "repeat number c", 0, 100, 1, DEFAULT_SETNAMES["repeat_numbers"][2])
+                for i in [_h, _k, _l, _t, _a, _b]:
+                    i.isEnabled = False
             
-            # Add inputs of Fusion 360 settings
+            # Add inputs of other settings
+            otherInputs = inputs.addGroupCommandInput("other", "Other settings")
+            appearance_input = otherInputs.children.addDropDownCommandInput("appearance", "appearance", TLSTYLE)
+            for appearance_name in APPEARANCE_IDS.keys():
+                is_selected = True if appearance_name == DEFAULT_APPEARANCE_NAME else False
+                appearance_input.listItems.add(appearance_name, is_selected)
             mode_input = otherInputs.children.addDropDownCommandInput("modeling_mode", "modeling mode", TLSTYLE)
             mode_input.listItems.add("Direct", True, "")
             mode_input.listItems.add("Parametric", False, "")
@@ -266,6 +288,7 @@ class Molecule:
         self._mirrorIndices = DEFAULT_SETNAMES["mirror_indices"]
         self._thickness = DEFAULT_SETNAMES["thickness"]
         self._repeatNumbers = DEFAULT_SETNAMES["repeat_numbers"]
+        self._appearanceID = APPEARANCE_IDS[DEFAULT_APPEARANCE_NAME]
         self._modelingMode = DEFAULT_SETNAMES["modeling_mode"]
 
     @property
@@ -346,6 +369,13 @@ class Molecule:
         self._repeatNumbers = value
 
     @property
+    def appearanceID(self):
+        return self._appearanceID
+    @appearanceID.setter
+    def appearanceID(self, value):
+        self._appearanceID = value
+
+    @property
     def modelingMode(self):
         return self._modelingMode
     @modelingMode.setter
@@ -361,12 +391,12 @@ class Molecule:
                     self.thickness
                 )
                 repeated_slab = slab.repeat(tuple(self.repeatNumbers))  
-                if self.modelingMode == "parametric":
+                if self.modelingMode == "Parametric":
                     self.buildMolecule(repeated_slab)
                 else:
                     self.buildMoleculeDirect(repeated_slab)
             else:
-                if self.modelingMode == "parametric":
+                if self.modelingMode == "Parametric":
                     self.buildMolecule(self.atoms)
                 else:
                     self.buildMoleculeDirect(self.atoms)
@@ -379,8 +409,8 @@ class Molecule:
 
             # Get material and appearance libraries
             materialLibs = app.materialLibraries
-            presetMaterials = materialLibs.itemById(MATERIAL_LIB_ID).materials
-            material = presetMaterials.itemById(DEFAULT_MATERIAL_ID)
+            # presetMaterials = materialLibs.itemById(MATERIAL_LIB_ID).materials
+            # material = presetMaterials.itemById(DEFAULT_MATERIAL_ID)
             presetAppearances = materialLibs.itemById(APPEARANCE_LIB_ID).appearances
             favoriteAppearances = design.appearances
 
@@ -460,13 +490,13 @@ class Molecule:
                 except:
                     elementColor = None
                 if not elementColor:
-                    baseColor = presetAppearances.itemById(DEFAULT_APPEARANCE_ID)
+                    baseColor = presetAppearances.itemById(self.appearanceID)
                     newColor = favoriteAppearances.addByCopy(baseColor, element_color_name)
                     colorProp = core.ColorProperty.cast(newColor.appearanceProperties.itemById('opaque_albedo'))
                     colorProp.value = core.Color.create(*color, 0)
                     elementColor = favoriteAppearances.itemByName(element_color_name)
                 for body in current_bodies:
-                    body.material = material
+                    # body.material = material
                     body.appearance = elementColor
 
                 # Update / Cancel progress
@@ -484,10 +514,13 @@ class Molecule:
     def buildMolecule(self, target_atoms):
         try:
 
+            # Set parametric mode
+            design.designType = adsk.fusion.DesignTypes.ParametricDesignType
+
             # Get material and appearance libraries
             materialLibs = app.materialLibraries
-            presetMaterials = materialLibs.itemById(MATERIAL_LIB_ID).materials
-            material = presetMaterials.itemById(DEFAULT_MATERIAL_ID)
+            # presetMaterials = materialLibs.itemById(MATERIAL_LIB_ID).materials
+            # material = presetMaterials.itemById(DEFAULT_MATERIAL_ID)
             presetAppearances = materialLibs.itemById(APPEARANCE_LIB_ID).appearances
             favoriteAppearances = design.appearances
 
@@ -600,16 +633,16 @@ class Molecule:
                 except:
                     elementColor = None
                 if not elementColor:
-                    baseColor = presetAppearances.itemById(DEFAULT_APPEARANCE_ID)
+                    baseColor = presetAppearances.itemById(self.appearanceID)
                     newColor = favoriteAppearances.addByCopy(baseColor, element_color_name)
                     colorProp = core.ColorProperty.cast(newColor.appearanceProperties.itemById('opaque_albedo'))
                     colorProp.value = core.Color.create(*color, 0)
                     elementColor = favoriteAppearances.itemByName(element_color_name)
                 if self.atomEnabled:
-                    body.material = material
+                    # body.material = material
                     body.appearance = elementColor
                 for sweepBody in sweepBodies:
-                    sweepBody.material = material
+                    # sweepBody.material = material
                     sweepBody.appearance = elementColor
 
                 # Update / Cancel progress
@@ -669,5 +702,3 @@ def run(context):
     except:
         if ui:
             ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
-
-

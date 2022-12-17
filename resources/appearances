@@ -1,0 +1,18 @@
+# Written in Python default config format
+# Typical materials
+
+[options]
+name = Default
+description = Typical materials and appearances
+default_value = glossy
+appearance_lib_id = BA5EE55E-9982-449B-9D66-9F036540E140
+# DEFAULT_MATERIAL_ID = 'PrismMaterial-022'
+# DEFAULT_APPEARANCE_ID = 'Prism-374'
+# MATERIAL_LIB_ID = 'C1EEA57C-3F56-45FC-B8CB-A9EC46A9994C'
+# APPEARANCE_LIB_ID = 'BA5EE55E-9982-449B-9D66-9F036540E140'
+
+[ids]
+glossy = Prism-374
+matte = Prism-127
+# GlossyMetal = Prism-047
+# MatteMetal = Prism-073
